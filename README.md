@@ -16,22 +16,26 @@ After you click the `Deploy` button above, you'll want to have standalone copy o
 
 ### Development
 
-1. First [clone the repo](#clone) if you have not done so already
-2. `cd my-project && cp .env.example .env` to copy the example environment variables. You'll need to add the `MONGODB_URL` from your Cloud project to your `.env` if you want to use S3 storage and the MongoDB database that was created for you.
+1. First [clone the repo](#clone) if you have not done so already.
+2. `cd wfm-scheduler && cp .env.example .env` to copy the example environment variables.
+3. Edit `.env` and set:
+   - `DATABASE_URL` – MongoDB connection string, for example `mongodb://127.0.0.1/wfm-scheduler`
+   - `PAYLOAD_SECRET` – a random string used to sign auth tokens
+4. Install dependencies and start the dev server:
+   - `pnpm install`
+   - `pnpm dev`
+5. Open `http://localhost:3000` in your browser.
 
-3. `pnpm install && pnpm dev` to install dependencies and start the dev server
-4. open `http://localhost:3000` to open the app in your browser
-
-That's it! Changes made in `./src` will be reflected in your app. Follow the on-screen instructions to login and create your first admin user. Then check out [Production](#production) once you're ready to build and serve your app, and [Deployment](#deployment) when you're ready to go live.
+Changes made in `./src` will be reflected in your app. Follow the on-screen instructions to login and create your first admin user.
 
 #### Docker (Optional)
 
-If you prefer to use Docker for local development instead of a local MongoDB instance, the provided docker-compose.yml file can be used.
+If you prefer to use Docker for local development instead of a local MongoDB instance, the provided `docker-compose.yml` file can be used.
 
 To do so, follow these steps:
 
-- Modify the `MONGODB_URL` in your `.env` file to `mongodb://127.0.0.1/<dbname>`
-- Modify the `docker-compose.yml` file's `MONGODB_URL` to match the above `<dbname>`
+- Modify the `DATABASE_URL` in your `.env` file to `mongodb://127.0.0.1/<dbname>`
+- Modify the `docker-compose.yml` file's `DATABASE_URL` to match the above `<dbname>`
 - Run `docker-compose up` to start the database, optionally pass `-d` to run in the background.
 
 ## How it works
@@ -61,6 +65,11 @@ Alternatively, you can use [Docker](https://www.docker.com) to spin up this temp
 1. Follow [steps 4 and 5 from above](#development) to login and create your first admin user
 
 That's it! The Docker instance will help you get up and running quickly while also standardizing the development environment across your teams.
+
+## Admin access
+
+- **Admin URL**: `http://localhost:3000/admin`
+- Use the first user you create on startup as the admin account.
 
 ## Questions
 
@@ -141,3 +150,63 @@ In the `Rules` collection you create concrete rules from the templates:
     ```
 
 These instances are what the scheduler engine will read to enforce hard constraints and apply soft preferences when generating schedules.
+
+## Running the scheduler
+
+The scheduler is exposed as a JSON API at `POST /api/run-schedule`.
+
+- **Request body** (JSON):
+
+  ```json
+  {
+    "from": "2025-01-01T00:00:00.000Z",
+    "to": "2025-01-07T23:59:59.000Z"
+  }
+  ```
+
+- **Example `curl` request**:
+
+  ```bash
+  curl -X POST http://localhost:3000/api/run-schedule \
+    -H "Content-Type: application/json" \
+    -d '{
+      "from": "2025-01-01T00:00:00.000Z",
+      "to": "2025-01-07T23:59:59.000Z"
+    }'
+  ```
+
+- **Response shape**:
+
+  ```json
+  {
+    "ok": true,
+    "humanReadable": "...\n...",
+    "result": {
+      "assignments": [
+        {
+          "shiftId": "shift-id",
+          "shiftTitle": "Shift title",
+          "assignedUserIds": ["user-id-1", "user-id-2"]
+        }
+      ],
+      "unfilled": [
+        {
+          "shiftId": "shift-id",
+          "shiftTitle": "Shift title",
+          "missingCount": 1,
+          "reason": "No eligible users meet skill/level"
+        }
+      ]
+    }
+  }
+  ```
+
+## Where schedule output is stored
+
+Each successful run of `POST /api/run-schedule` creates a document in the `Schedule runs` collection (`schedule-runs` slug) with:
+
+- `from` / `to`: the requested window
+- `result`: the JSON structure shown above
+- `humanReadable`: a multi-line text summary of assignments and any unfilled shifts
+
+You can inspect past runs directly in the Payload admin under the `Schedule runs` collection.
