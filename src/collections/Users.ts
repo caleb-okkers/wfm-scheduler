@@ -7,7 +7,40 @@ export const Users: CollectionConfig = {
   },
   auth: true,
   fields: [
-    // Email added by default
-    // Add more fields as needed
+    {
+      name: 'skills',
+      type: 'array',
+      fields: [
+        {
+          name: 'skill',
+          type: 'relationship',
+          relationTo: 'skills',
+          required: true,
+        },
+        {
+          name: 'level',
+          type: 'select',
+          required: true,
+          options: [
+            {
+              label: 'Beginner',
+              value: 'beginner',
+            },
+            {
+              label: 'Intermediate',
+              value: 'intermediate',
+            },
+            {
+              label: 'Advanced',
+              value: 'advanced',
+            },
+            {
+              label: 'Expert',
+              value: 'expert',
+            },
+          ],
+        },
+      ],
+    },
   ],
 }
