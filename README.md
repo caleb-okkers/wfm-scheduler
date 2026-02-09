@@ -65,3 +65,79 @@ That's it! The Docker instance will help you get up and running quickly while al
 ## Questions
 
 If you have any issues or questions, reach out to us on [Discord](https://discord.com/invite/payload) or start a [GitHub discussion](https://github.com/payloadcms/payload/discussions).
+
+## Defining scheduling rules in the admin
+
+This project uses `RuleTemplates` and `Rules` collections to define reusable scheduling logic.
+
+### Creating `RuleTemplates`
+
+In the Payload admin UI:
+
+1. Go to the `Rule templates` collection.
+2. Click **Create New** (if allowed in your environment) or seed via scripts/fixtures.
+3. Create a template for **MAX_HOURS_PER_WEEK**:
+   - **key**: `MAX_HOURS_PER_WEEK`
+   - **name**: `Max hours per week`
+   - **description**: e.g. `Limit total scheduled hours per user within a rolling week`
+   - **paramSchema**:
+     ```json
+     {
+       "type": "object",
+       "properties": {
+         "maxHours": {
+           "type": "number",
+           "description": "Maximum hours allowed per user in a week"
+         }
+       },
+       "required": ["maxHours"]
+     }
+     ```
+4. Create a template for **PREFER_HIGHER_SKILL_LEVEL**:
+   - **key**: `PREFER_HIGHER_SKILL_LEVEL`
+   - **name**: `Prefer higher skill level`
+   - **description**: e.g. `Prefer assigning staff with higher skill levels when available`
+   - **paramSchema**:
+     ```json
+     {
+       "type": "object",
+       "properties": {
+         "minimumLevel": {
+           "type": "string",
+           "enum": ["beginner", "intermediate", "advanced", "expert"],
+           "description": "Minimum skill level to prefer"
+         }
+       },
+       "required": ["minimumLevel"]
+     }
+     ```
+
+### Example `Rules` instances
+
+In the `Rules` collection you create concrete rules from the templates:
+
+- **Hard max weekly hours**
+  - **type**: `hard`
+  - **enabled**: `true`
+  - **priority**: `100`
+  - **template**: `MAX_HOURS_PER_WEEK`
+  - **params**:
+    ```json
+    {
+      "maxHours": 40
+    }
+    ```
+
+- **Soft preference for advanced skill**
+  - **type**: `soft`
+  - **enabled**: `true`
+  - **priority**: `50`
+  - **template**: `PREFER_HIGHER_SKILL_LEVEL`
+  - **params**:
+    ```json
+    {
+      "minimumLevel": "advanced"
+    }
+    ```
+
+These instances are what the scheduler engine will read to enforce hard constraints and apply soft preferences when generating schedules.
