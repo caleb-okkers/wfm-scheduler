@@ -6,7 +6,9 @@ const RuleTemplates: CollectionConfig = {
     useAsTitle: 'name',
   },
   access: {
-    create: () => false,
+    read: ({ req }) => Boolean(req.user),
+    create: ({ req }) => Boolean(req.user),
+    update: ({ req }) => Boolean(req.user),
     delete: () => false,
   },
   fields: [
@@ -36,4 +38,3 @@ const RuleTemplates: CollectionConfig = {
 }
 
 export default RuleTemplates
-

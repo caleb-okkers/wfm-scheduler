@@ -1,67 +1,140 @@
-# Payload Blank Template
+# WFM Scheduler (Payload CMS)
 
-This template comes configured with the bare minimum to get started on anything you need.
-
-## Quick start
-
-This template can be deployed directly from our Cloud hosting and it will setup MongoDB and cloud S3 object storage for media.
+This project demonstrates an automatically generated shift schedule for call-center staff based on **multiple skills per user**, **skill levels**, and **configurable hard/soft rules**.
 
 ## Quick Start - local setup
 
-To spin up this template locally, follow these steps:
-
-### Clone
-
-After you click the `Deploy` button above, you'll want to have standalone copy of this repo on your machine. If you've already cloned this repo, skip to [Development](#development).
-
 ### Development
 
-1. First [clone the repo](#clone) if you have not done so already
-2. `cd my-project && cp .env.example .env` to copy the example environment variables. You'll need to add the `MONGODB_URL` from your Cloud project to your `.env` if you want to use S3 storage and the MongoDB database that was created for you.
+1. `cp .env.example .env`
+2. Edit `.env` and set:
+   - `DATABASE_URL` – MongoDB connection string (example: `mongodb://127.0.0.1:27017/wfm-scheduler`)
+   - `PAYLOAD_SECRET` – a random string used to sign auth tokens
+3. Install dependencies and start the dev server:
+   - `pnpm install`
+   - `pnpm dev`
+4. Open `http://localhost:3000` in your browser.
 
-3. `pnpm install && pnpm dev` to install dependencies and start the dev server
-4. open `http://localhost:3000` to open the app in your browser
+On first run, the Admin UI will prompt you to create the first admin user.
 
-That's it! Changes made in `./src` will be reflected in your app. Follow the on-screen instructions to login and create your first admin user. Then check out [Production](#production) once you're ready to build and serve your app, and [Deployment](#deployment) when you're ready to go live.
+## Admin access
 
-#### Docker (Optional)
+- **Admin URL**: `http://localhost:3000/admin`
+- Use the first user you create on startup as the admin account.
 
-If you prefer to use Docker for local development instead of a local MongoDB instance, the provided docker-compose.yml file can be used.
+## Data model (collections)
 
-To do so, follow these steps:
+You can manage all scheduler inputs via the Admin UI:
 
-- Modify the `MONGODB_URL` in your `.env` file to `mongodb://127.0.0.1/<dbname>`
-- Modify the `docker-compose.yml` file's `MONGODB_URL` to match the above `<dbname>`
-- Run `docker-compose up` to start the database, optionally pass `-d` to run in the background.
+- **Skills**
+  - `name` (unique)
+  - `description` (optional)
+- **Users** (auth-enabled)
+  - `email`, `password`
+  - `skills[]`: relationship to Skills + `level` (`beginner|intermediate|advanced|expert`)
+- **Shifts**
+  - `title` (human readable)
+  - `start`, `end`
+  - `requiredSkill` (relationship to Skills)
+  - `requiredLevel`
+  - `staffingRequired`
+- **Rule Templates**
+  - reusable rule definitions (e.g. MAX_HOURS_PER_WEEK)
+- **Rules**
+  - concrete enabled rules with priority and params
+- **Schedule Runs**
+  - persisted outputs from each scheduling run
 
-## How it works
+## Defining scheduling rules in the Admin UI
 
-The Payload config is tailored specifically to the needs of most websites. It is pre-configured in the following ways:
+This project uses `RuleTemplates` (reusable definitions) and `Rules` (enabled instances).
 
-### Collections
+### Create RuleTemplates
 
-See the [Collections](https://payloadcms.com/docs/configuration/collections) docs for details on how to extend this functionality.
+In Admin:
 
-- #### Users (Authentication)
+1. Go to **Rule Templates**
+2. Click **Create New**
+3. Create **MAX_HOURS_PER_WEEK**:
+   - **key**: `MAX_HOURS_PER_WEEK`
+   - **name**: `Max hours per week`
+   - **description**: e.g. `Limit total scheduled hours per user within a rolling week`
+   - **paramSchema**:
+     ```json
+     {
+       "type": "object",
+       "properties": {
+         "maxHours": {
+           "type": "integer",
+           "minimum": 1,
+           "description": "Maximum hours allowed per user in a week"
+         }
+       },
+       "required": ["maxHours"],
+       "additionalProperties": false
+     }
+     ```
 
-  Users are auth-enabled collections that have access to the admin panel.
+4. Create **PREFER_HIGHER_SKILL_LEVEL** (no required params):
+   - **key**: `PREFER_HIGHER_SKILL_LEVEL`
+   - **name**: `Prefer higher skill level`
+   - **description**: e.g. `Prefer assigning staff with higher skill levels when available`
+   - **paramSchema**:
+     ```json
+     {
+       "type": "object",
+       "properties": {},
+       "additionalProperties": false
+     }
+     ```
 
-  For additional help, see the official [Auth Example](https://github.com/payloadcms/payload/tree/main/examples/auth) or the [Authentication](https://payloadcms.com/docs/authentication/overview#authentication-overview) docs.
+> Note: The scheduler code also supports an optional `minimumLevel` param for this template, but it is not required.
 
-- #### Media
+### Create Rules (instances)
 
-  This is the uploads enabled collection. It features pre-configured sizes, focal point and manual resizing to help you manage your pictures.
+In **Rules**, create enabled instances from the templates:
 
-### Docker
+- **Hard max weekly hours**
+  - **type**: `hard`
+  - **enabled**: `true`
+  - **priority**: `1`
+  - **template**: `MAX_HOURS_PER_WEEK`
+  - **params**:
+    ```json
+    {
+      "maxHours": 40
+    }
+    ```
 
-Alternatively, you can use [Docker](https://www.docker.com) to spin up this template locally. To do so, follow these steps:
+- **Soft preference for higher skill**
+  - **type**: `soft`
+  - **enabled**: `true`
+  - **priority**: `10`
+  - **template**: `PREFER_HIGHER_SKILL_LEVEL`
+  - **params**:
+    ```json
+    {}
+    ```
 
-1. Follow [steps 1 and 2 from above](#development), the docker-compose file will automatically use the `.env` file in your project root
-1. Next run `docker-compose up`
-1. Follow [steps 4 and 5 from above](#development) to login and create your first admin user
+## Running the scheduler
 
-That's it! The Docker instance will help you get up and running quickly while also standardizing the development environment across your teams.
+### Option A (recommended): Run from Admin UI
 
-## Questions
+1. Go to **Admin → Schedule Runs**
+2. Use the **Run Scheduler** panel at the top
+3. Enter `from` / `to` (ISO datetimes)
+4. Click **Run Scheduler**
 
-If you have any issues or questions, reach out to us on [Discord](https://discord.com/invite/payload) or start a [GitHub discussion](https://github.com/payloadcms/payload/discussions).
+A new **Schedule Run** will be created and saved automatically.
+
+### Option B: Run via API
+
+The scheduler is exposed as JSON API:
+
+- **Endpoint**: `POST /api/run-schedule`
+- **Body**:
+  ```json
+  {
+    "from": "2026-02-10T00:00:00.000Z",
+    "to": "2026-02-17T23:59:59.999Z"
+  }

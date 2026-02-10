@@ -2,7 +2,15 @@ import type { CollectionConfig } from 'payload'
 
 const Shifts: CollectionConfig = {
   slug: 'shifts',
+  admin: {
+    useAsTitle: 'title',
+  },
   fields: [
+    {
+      name: 'title',
+      type: 'text',
+      required: true,
+    },
     {
       name: 'start',
       type: 'date',
@@ -24,22 +32,10 @@ const Shifts: CollectionConfig = {
       type: 'select',
       required: true,
       options: [
-        {
-          label: 'Beginner',
-          value: 'beginner',
-        },
-        {
-          label: 'Intermediate',
-          value: 'intermediate',
-        },
-        {
-          label: 'Advanced',
-          value: 'advanced',
-        },
-        {
-          label: 'Expert',
-          value: 'expert',
-        },
+        { label: 'Beginner', value: 'beginner' },
+        { label: 'Intermediate', value: 'intermediate' },
+        { label: 'Advanced', value: 'advanced' },
+        { label: 'Expert', value: 'expert' },
       ],
     },
     {
@@ -51,4 +47,3 @@ const Shifts: CollectionConfig = {
 }
 
 export default Shifts
-
