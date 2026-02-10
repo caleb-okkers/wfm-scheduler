@@ -69,6 +69,11 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    skills: Skill;
+    shifts: Shift;
+    'rule-templates': RuleTemplate;
+    rules: Rule;
+    'schedule-runs': ScheduleRun;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -78,6 +83,11 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    skills: SkillsSelect<false> | SkillsSelect<true>;
+    shifts: ShiftsSelect<false> | ShiftsSelect<true>;
+    'rule-templates': RuleTemplatesSelect<false> | RuleTemplatesSelect<true>;
+    rules: RulesSelect<false> | RulesSelect<true>;
+    'schedule-runs': ScheduleRunsSelect<false> | ScheduleRunsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -120,6 +130,13 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: string;
+  skills?:
+    | {
+        skill: string | Skill;
+        level: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+        id?: string | null;
+      }[]
+    | null;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -141,6 +158,17 @@ export interface User {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "skills".
+ */
+export interface Skill {
+  id: string;
+  name: string;
+  description?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "media".
  */
 export interface Media {
@@ -157,6 +185,85 @@ export interface Media {
   height?: number | null;
   focalX?: number | null;
   focalY?: number | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "shifts".
+ */
+export interface Shift {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  requiredSkill: string | Skill;
+  requiredLevel: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+  staffingRequired: number;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "rule-templates".
+ */
+export interface RuleTemplate {
+  id: string;
+  key: string;
+  name: string;
+  description?: string | null;
+  paramSchema:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "rules".
+ */
+export interface Rule {
+  id: string;
+  type: 'hard' | 'soft';
+  enabled: boolean;
+  priority: number;
+  template: string | RuleTemplate;
+  params?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "schedule-runs".
+ */
+export interface ScheduleRun {
+  id: string;
+  from: string;
+  to: string;
+  result:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  humanReadable: string;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -189,6 +296,26 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: string | Media;
+      } | null)
+    | ({
+        relationTo: 'skills';
+        value: string | Skill;
+      } | null)
+    | ({
+        relationTo: 'shifts';
+        value: string | Shift;
+      } | null)
+    | ({
+        relationTo: 'rule-templates';
+        value: string | RuleTemplate;
+      } | null)
+    | ({
+        relationTo: 'rules';
+        value: string | Rule;
+      } | null)
+    | ({
+        relationTo: 'schedule-runs';
+        value: string | ScheduleRun;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -237,6 +364,13 @@ export interface PayloadMigration {
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  skills?:
+    | T
+    | {
+        skill?: T;
+        level?: T;
+        id?: T;
+      };
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -271,6 +405,67 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "skills_select".
+ */
+export interface SkillsSelect<T extends boolean = true> {
+  name?: T;
+  description?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "shifts_select".
+ */
+export interface ShiftsSelect<T extends boolean = true> {
+  title?: T;
+  start?: T;
+  end?: T;
+  requiredSkill?: T;
+  requiredLevel?: T;
+  staffingRequired?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "rule-templates_select".
+ */
+export interface RuleTemplatesSelect<T extends boolean = true> {
+  key?: T;
+  name?: T;
+  description?: T;
+  paramSchema?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "rules_select".
+ */
+export interface RulesSelect<T extends boolean = true> {
+  type?: T;
+  enabled?: T;
+  priority?: T;
+  template?: T;
+  params?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "schedule-runs_select".
+ */
+export interface ScheduleRunsSelect<T extends boolean = true> {
+  from?: T;
+  to?: T;
+  result?: T;
+  humanReadable?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

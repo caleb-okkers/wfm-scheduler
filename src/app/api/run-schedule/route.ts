@@ -2,13 +2,7 @@ import configPromise from '@payload-config'
 import { getPayload } from 'payload'
 
 import { runScheduler } from '../../../scheduler/scheduler'
-import type {
-  AnyRule,
-  RunSchedulerInput,
-  SchedulerShift,
-  SchedulerUser,
-  SkillLevel,
-} from '../../../scheduler/types'
+import type { AnyRule, RunSchedulerInput, SchedulerShift, SchedulerUser, SkillLevel } from '../../../scheduler/types'
 
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue }
 
@@ -16,6 +10,8 @@ interface RunScheduleBody {
   from: string
   to: string
 }
+
+const fmt = (d: Date) => d.toISOString().replace('T', ' ').slice(0, 16)
 
 export const POST = async (req: Request) => {
   let body: RunScheduleBody
@@ -37,18 +33,18 @@ export const POST = async (req: Request) => {
     return Response.json({ ok: false, error: 'Invalid `from` or `to` datetime' }, { status: 400 })
   }
 
-  const payload = await getPayload({
-    config: configPromise,
-  })
+  const payload = await getPayload({ config: configPromise })
 
   try {
     const [usersRes, shiftsRes, rulesRes] = await Promise.all([
       payload.find({
         collection: 'users',
+        depth: 2, // get email + populated skills.skill
         limit: 1000,
       }),
       payload.find({
         collection: 'shifts',
+        depth: 1, // get requiredSkill populated
         where: {
           and: [
             { start: { greater_than_equal: from.toISOString() } },
@@ -59,17 +55,24 @@ export const POST = async (req: Request) => {
       }),
       payload.find({
         collection: 'rules',
-        where: {
-          enabled: { equals: true },
-        },
+        where: { enabled: { equals: true } },
         depth: 1,
         limit: 100,
       }),
     ])
 
-    const users: SchedulerUser[] = (usersRes.docs as any[]).map((user) => ({
-      id: String(user.id),
-      skills:
+    // Lookups for human-readable output
+    const userEmailById = new Map<string, string>()
+    const skillNameById = new Map<string, string>()
+    const shiftById = new Map<
+      string,
+      { title: string | null; start: Date; end: Date; requiredSkillName: string | null; requiredLevel: SkillLevel }
+    >()
+
+    const users: SchedulerUser[] = (usersRes.docs as any[]).map((user) => {
+      userEmailById.set(String(user.id), String(user.email ?? ''))
+
+      const skills =
         (user.skills as any[] | undefined)?.map((entry) => {
           const skill = entry?.skill
           const skillId =
@@ -79,12 +82,15 @@ export const POST = async (req: Request) => {
                 ? String(skill.id)
                 : ''
 
-          return {
-            skillId,
-            level: entry.level as SkillLevel,
-          }
-        }) ?? [],
-    }))
+          const skillName =
+            skill && typeof skill === 'object' && 'name' in skill ? String(skill.name ?? '') : null
+          if (skillId && skillName) skillNameById.set(skillId, skillName)
+
+          return { skillId, level: entry.level as SkillLevel }
+        }) ?? []
+
+      return { id: String(user.id), skills }
+    })
 
     const shifts: SchedulerShift[] = (shiftsRes.docs as any[]).map((shift) => {
       const requiredSkill = shift.requiredSkill
@@ -95,13 +101,28 @@ export const POST = async (req: Request) => {
             ? String(requiredSkill.id)
             : ''
 
+      const requiredSkillName =
+        requiredSkill && typeof requiredSkill === 'object' && 'name' in requiredSkill
+          ? String(requiredSkill.name ?? '')
+          : null
+
+      if (requiredSkillId && requiredSkillName) skillNameById.set(requiredSkillId, requiredSkillName)
+
+      const id = String(shift.id)
+      const title = (shift.title as string | undefined) ?? null
+      const start = new Date(shift.start)
+      const end = new Date(shift.end)
+      const requiredLevel = shift.requiredLevel as SkillLevel
+
+      shiftById.set(id, { title, start, end, requiredSkillName, requiredLevel })
+
       return {
-        id: String(shift.id),
-        title: (shift.title as string | undefined) ?? null,
-        start: new Date(shift.start),
-        end: new Date(shift.end),
+        id,
+        title,
+        start,
+        end,
         requiredSkillId,
-        requiredLevel: shift.requiredLevel as SkillLevel,
+        requiredLevel,
         staffingRequired: Number(shift.staffingRequired ?? 0),
       }
     })
@@ -112,12 +133,10 @@ export const POST = async (req: Request) => {
         const templateDoc =
           template && typeof template === 'object' && 'key' in template ? template : null
         const templateKey = templateDoc?.key as string | undefined
-
         if (!templateKey) return null
 
         if (templateKey === 'MAX_HOURS_PER_WEEK') {
           const maxHours = Number((rule.params as any)?.maxHours ?? 0)
-
           return {
             id: String(rule.id),
             name: (rule.name as string | undefined) ?? null,
@@ -125,15 +144,12 @@ export const POST = async (req: Request) => {
             enabled: Boolean(rule.enabled),
             priority: Number(rule.priority ?? 0),
             templateKey: 'MAX_HOURS_PER_WEEK',
-            params: {
-              maxHours,
-            },
+            params: { maxHours },
           } as AnyRule
         }
 
         if (templateKey === 'PREFER_HIGHER_SKILL_LEVEL') {
           const minimumLevelRaw = (rule.params as any)?.minimumLevel as SkillLevel | undefined
-
           return {
             id: String(rule.id),
             name: (rule.name as string | undefined) ?? null,
@@ -141,9 +157,7 @@ export const POST = async (req: Request) => {
             enabled: Boolean(rule.enabled),
             priority: Number(rule.priority ?? 0),
             templateKey: 'PREFER_HIGHER_SKILL_LEVEL',
-            params: {
-              minimumLevel: minimumLevelRaw,
-            },
+            params: { minimumLevel: minimumLevelRaw },
           } as AnyRule
         }
 
@@ -151,20 +165,67 @@ export const POST = async (req: Request) => {
       })
       .filter((r): r is AnyRule => r !== null)
 
-    const schedulerInput: RunSchedulerInput = {
-      users,
-      shifts,
-      rules,
+    const schedulerInput: RunSchedulerInput = { users, shifts, rules }
+
+    const { result } = runScheduler(schedulerInput)
+
+    // Enrich result for humans (keep IDs too)
+    const enriched = {
+      ...result,
+      assignments: result.assignments.map((a) => {
+        const shiftMeta = shiftById.get(a.shiftId)
+        return {
+          ...a,
+          shiftTitle: shiftMeta?.title ?? a.shiftTitle ?? null,
+          assignedUsers: a.assignedUserIds.map((id) => ({
+            id,
+            email: userEmailById.get(id) ?? id,
+          })),
+        }
+      }),
+      unfilled: result.unfilled.map((u) => {
+        const shiftMeta = shiftById.get(u.shiftId)
+        return {
+          ...u,
+          shiftTitle: shiftMeta?.title ?? u.shiftTitle ?? null,
+        }
+      }),
     }
 
-    const { result, humanReadable } = runScheduler(schedulerInput)
+    // Better human-readable summary
+    const lines: string[] = []
+    lines.push(`Schedule Run: ${fmt(from)} → ${fmt(to)}`)
+    lines.push('')
 
-    await payload.create({
+    for (const a of enriched.assignments) {
+      const meta = shiftById.get(a.shiftId)
+      const shiftLabel =
+        meta?.title ?? a.shiftTitle ?? `Shift ${a.shiftId}`
+      const skillLabel = meta?.requiredSkillName ? ` (${meta.requiredSkillName} – ${meta.requiredLevel})` : ''
+      const timeLabel = meta ? ` [${fmt(meta.start)}–${fmt(meta.end)}]` : ''
+      lines.push(`${shiftLabel}${skillLabel}${timeLabel}`)
+      lines.push(`- Assigned (${a.assignedUsers.length}):`)
+      for (const u of a.assignedUsers) lines.push(`  • ${u.email}`)
+      lines.push('')
+    }
+
+    for (const u of enriched.unfilled) {
+      const meta = shiftById.get(u.shiftId)
+      const shiftLabel =
+        meta?.title ?? u.shiftTitle ?? `Shift ${u.shiftId}`
+      lines.push(`${shiftLabel}`)
+      lines.push(`- Unfilled (${u.missingCount}): ${u.reason}`)
+      lines.push('')
+    }
+
+    const humanReadable = lines.join('\n').trim()
+
+    const created = await payload.create({
       collection: 'schedule-runs',
       data: {
         from,
         to,
-        result: result as unknown as JsonValue,
+        result: enriched as unknown as JsonValue,
         humanReadable,
       },
     })
@@ -172,8 +233,9 @@ export const POST = async (req: Request) => {
     return Response.json(
       {
         ok: true,
+        id: String(created.id),
         humanReadable,
-        result,
+        result: enriched,
       },
       { status: 200 },
     )
@@ -182,4 +244,3 @@ export const POST = async (req: Request) => {
     return Response.json({ ok: false, error: message }, { status: 500 })
   }
 }
-
